@@ -22,7 +22,7 @@
 ;;; Commentary:
 ;;
 ;;    org-helpers provide many methods to configure org-mode easily
-;;  the GTD way.
+;;  for the GTD way of organizing tasks.
 ;;
 ;;; Installation:
 ;;
@@ -34,11 +34,136 @@
 ;;
 ;;; Credits
 ;;
-;;    Most code is based or taken from the wonderful article from
+;;    Most code is based on the wonderful article from
 ;;  norang. (http://doc.norang.ca/org-mode.html)
 ;;  Many thanks to Bernt Hansen for a well-founded approach!
 ;;
 ;;; Code
+
+(defmacro oh/agenda-type (&rest types)
+  `(or ,@(mapcar '(lambda (item)
+                   (let ((type (symbol-name (if (listp item)
+                                                (car (cdr item))
+                                              item))))
+                     `(,(intern (concat "oh/is-" type "-p")))))
+                types)))
+
+(defun oh/agenda-typed (&rest types)
+  (loop for type in types do
+        (let ((type-string (symbol-name (if (listp type)
+                                            (nth 2 type)
+                                          type))))
+          )
+
+(defun oh/agenda-skip (&rest types)
+  "Returns true when one of the given check functions return true"
+  (let ((subtree-end (save-excursion (org-end-of-subtree t))))
+    (cond
+     ((eval (macroexpand `(oh/agenda-type ,@types)))
+      subtree-end)
+     (t nil))))
+
+(defun oh/is-project-p ()
+  "Returns true if at point is a project."
+  (save-restriction
+    (widen)
+    (let ((has-subtask)
+          (subtree-end (save-excursion (org-end-of-subtree t)))
+          (is-a-task (member (nth 2 (org-heading-components)) org-todo-keywords-1)))
+      (save-excursion
+        (forward-line 1)
+        (while (and (not has-subtask)
+                    (< (point) subtree-end)
+                    (re-search-forward "^\*+ " subtree-end t))
+          (when (member (org-get-todo-state) org-todo-keywords-1)
+            (setq has-subtask t))))
+      (and is-a-task has-subtask))))
+
+(defun oh/is-non-project-p ()
+  "Returns true if at point is not a project."
+  (not (oh/is-project-p)))
+
+(defun oh/is-stuck-project-p ()
+  "Returns true if at point is a project without a task that´s specified NEXT."
+  nil)
+
+(defun oh/is-non-stuck-project-p ()
+  "Returns true if at point is a project without a task that´s specified NEXT."
+  nil)
+
+(defun oh/is-active-project-p ()
+  "Returns true if the headline at point is a project and it is active.
+   Which means it is TODO not " nil)
+
+(defun oh/is-inactive-project-p ()
+  "Returns true if the headline at point is a project and it is inactive.
+   Which means it is ether from tag SOMEDAY or HOLD."
+  (member (nth 2 (org-heading-components)) (list "SOMEDAY")))
+
+(defun oh/is-someday-p ()
+  "Returns true if the headline at point or its parent project is from tag SOMEDAY."
+  (member (nth 2 (org-heading-components)) (list "SOMEDAY")))
+
+(defun oh/is-subproject-p ()
+  "Returns true if at point is a subproject." nil)
+
+(defun oh/is-non-subproject-p ()
+  "Returns true if at point is not a subproject." nil)
+
+(defun oh/is-subtask-p ()
+  "Returns true if at point is a subtask of a project." nil)
+
+(defun oh/is-task-p ()
+  "Returns true if at point is a task." nil)
+
+(defun oh/is-single-task-p ()
+  "Returns true if at point is a task that´s not part of a project.")
+
+(defun oh/is-habit-p ()
+  "Returns true if at point is a recurring habit."
+  (org-is-habit-p))
+
+(defun oh/is-scheduled-p ()
+  "True if the current entry is scheduled."
+  (let (beg end m)
+    (org-back-to-heading t)
+    (setq beg (point)
+          end (progn (outline-next-heading)
+                     (1- (point))))
+    (goto-char beg)
+    (re-search-forward org-scheduled-time-regexp end t)))
+
+(defun oh/is-deadline-p ()
+  "True if the current entry is deadlined."
+  (let (beg end m)
+    (org-back-to-heading t)
+    (setq beg (point)
+          end (progn (outline-next-heading)
+                     (1- (point))))
+    (goto-char beg)
+    (re-search-forward org-deadline-time-regexp end t)))
+
+(defun oh/is-scheduled-today ()
+  "" nil)
+
+(defun oh/is-scheduled-late ()
+  "" nil)
+
+(defun oh/is-deadline ()
+  "" nil)
+
+(defun oh/is-due-deadline ()
+  "" nil)
+
+(defun oh/is-late-deadline ()
+  "" nil)
+
+(defun oh/is-pending-deadline ()
+  "" nil)
+
+(defun oh/find-toplevel-project ()
+  "Moves the point to the top project of the current headline, if any ..."
+  nil)
 
 (defun oh/agenda-sort (a b)
   "Sorting strategy for agenda items.
@@ -163,6 +288,7 @@ Late deadlines first, then scheduled, then non-late deadlines"
 
 (defun oh/narrow-to-subtree ()
   (interactive)
+  (org-get-at-bol)
   (if (equal major-mode 'org-agenda-mode)
       (org-with-point-at (org-get-at-bol 'org-hd-marker)
         (oh/narrow-to-org-subtree))
@@ -311,6 +437,7 @@ as the default task."
     (oh/clock-in-parent-task)))
 
 (require 'org-id)
+
 (defun oh/clock-in-task-by-id (id)
   "Clock in a task by id"
   (org-with-point-at (org-id-find id 'marker)
@@ -511,10 +638,8 @@ When not restricted, skip project and sub-project tasks, habits, and project rel
            (next-headline (save-excursion (or (outline-next-heading) (point-max))))
            (limit-to-project (marker-buffer org-agenda-restrict-begin)))
       (cond
-       ((oh/is-project-p)
-        next-headline)
-       ((org-is-habit-p)
-        subtree-end)
+       ((oh/is-project-p) next-headline)
+       ((org-is-habit-p) subtree-end)
        ((and (not limit-to-project)
              (oh/is-project-subtree-p))
         subtree-end)
