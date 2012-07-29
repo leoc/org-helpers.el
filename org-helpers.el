@@ -48,99 +48,143 @@
                      `(,(intern (concat "oh/is-" type "-p")))))
                 types)))
 
-(defun oh/agenda-typed (&rest types)
-  (loop for type in types do
-        (let ((type-string (symbol-name (if (listp type)
-                                            (nth 2 type)
-                                          type))))
-          )
-
-(defun oh/agenda-skip (&rest types)
-  "Returns true when one of the given check functions return true"
-  (let ((subtree-end (save-excursion (org-end-of-subtree t))))
+(defun* oh/agenda-skip (&rest types
+                        &key ((:headline-if headline) nil)
+                             ((:headline-if-restricted-and headline-restricted) nil)
+                             ((:headline-if-unrestricted-and headline-unrestricted) nil)
+                             ((:subtree-if subtree) nil)
+                             ((:subtree-if-restricted-and subtree-restricted) nil)
+                             ((:subtree-if-unrestricted-and subtree-unrestricted) nil))
+  "True when one of the given check functions return true."
+  (let* ((subtree-values (or types subtree))
+        (subtree-end (save-excursion (org-end-of-subtree t)))
+        (next-headline (save-excursion (or (outline-next-heading)
+                                           (point-max))))
+        (restricted-to-project (marker-buffer org-agenda-restrict-begin)))
     (cond
-     ((eval (macroexpand `(oh/agenda-type ,@types)))
+     ((and headline
+           (eval (macroexpand `(oh/agenda-type ,@headline))))
+      next-headline)
+     ((and headline-restricted
+           restricted-to-project
+           (eval (macroexpand `(oh/agenda-type ,@headline-restricted))))
+      next-headline)
+     ((and headline-unrestricted
+           (not restricted-to-project)
+           (eval (macroexpand `(oh/agenda-type ,@headline-unrestricted))))
+      next-headline)
+     ((and subtree
+           (eval (macroexpand `(oh/agenda-type ,@subtree))))
+      subtree-end)
+     ((and subtree-restricted
+           restricted-to-project
+           (eval (macroexpand `(oh/agenda-type ,@subtree-restricted))))
+      subtree-end)
+     ((and subtree-unrestricted
+           (not restricted-to-project)
+           (eval (macroexpand `(oh/agenda-type ,@subtree-unrestricted))))
       subtree-end)
      (t nil))))
 
-(defun oh/is-project-p ()
-  "Returns true if at point is a project."
+(defun oh/has-subtask-p ()
+  "Returns t for any heading that has subtasks."
   (save-restriction
     (widen)
-    (let ((has-subtask)
-          (subtree-end (save-excursion (org-end-of-subtree t)))
-          (is-a-task (member (nth 2 (org-heading-components)) org-todo-keywords-1)))
+    (org-back-to-heading t)
+    (let ((end (save-excursion (org-end-of-subtree t))))
+      (outline-end-of-heading)
       (save-excursion
-        (forward-line 1)
-        (while (and (not has-subtask)
-                    (< (point) subtree-end)
-                    (re-search-forward "^\*+ " subtree-end t))
-          (when (member (org-get-todo-state) org-todo-keywords-1)
-            (setq has-subtask t))))
-      (and is-a-task has-subtask))))
+        (re-search-forward (concat "^\*+ " org-todo-regexp) end t)))))
+
+(defun oh/has-parent-project-p ()
+  "Returns t when current heading has a parent project."
+  (let ((has-parent nil))
+    (while (and (not has-parent) (org-up-heading-safe))
+      (when (oh/is-todo-p)
+        (setq has-parent t)))
+    has-parent))
+
+(defun oh/is-todo-p ()
+  "Returns t for any heading that has a todo keyword."
+  (member (org-get-todo-state) org-todo-keywords-1))
+
+(defun oh/is-project-p ()
+  "Returns t for any heading that is a todo item and that has a subtask."
+  (and (oh/is-todo-p)
+       (oh/has-subtask-p)))
 
 (defun oh/is-non-project-p ()
-  "Returns true if at point is not a project."
+  "Returns t for any heading that is not a project. E.g. that does not
+   have a subtask or is not a todo item."
   (not (oh/is-project-p)))
 
 (defun oh/is-stuck-project-p ()
-  "Returns true if at point is a project without a task that´s specified NEXT."
-  nil)
+  "Returns t for any heading that is a project but does not have a NEXT
+   subtask."
+  (save-excursion
+    (let ((end (save-excursion (org-end-of-subtree t))))
+      (outline-end-of-heading)
+      (and (oh/is-project-p)
+           (not (re-search-forward "^\\*+ \\(NEXT\\|STARTED\\) " end t))))))
 
 (defun oh/is-non-stuck-project-p ()
-  "Returns true if at point is a project without a task that´s specified NEXT."
-  nil)
-
-(defun oh/is-active-project-p ()
-  "Returns true if the headline at point is a project and it is active.
-   Which means it is TODO not " nil)
-
-(defun oh/is-inactive-project-p ()
-  "Returns true if the headline at point is a project and it is inactive.
-   Which means it is ether from tag SOMEDAY or HOLD."
-  (member (nth 2 (org-heading-components)) (list "SOMEDAY")))
-
-(defun oh/is-someday-p ()
-  "Returns true if the headline at point or its parent project is from tag SOMEDAY."
-  (member (nth 2 (org-heading-components)) (list "SOMEDAY")))
+  "Returns t for any heading that is a project and has a `NEXT` subtask."
+  (save-excursion
+    (let ((end (save-excursion (org-end-of-subtree t))))
+      (outline-end-of-heading)
+      (and (oh/is-project-p)
+           (re-search-forward "^\\*+ \\(NEXT\\|STARTED\\) " end t)))))
 
 (defun oh/is-subproject-p ()
-  "Returns true if at point is a subproject." nil)
+  "Returns t for any heading that is a project and has a parent project."
+  (and (oh/is-project-p)
+       (oh/has-parent-project-p)))
 
-(defun oh/is-non-subproject-p ()
-  "Returns true if at point is not a subproject." nil)
-
-(defun oh/is-subtask-p ()
-  "Returns true if at point is a subtask of a project." nil)
+(defun oh/is-top-project-p ()
+  "Returns t when current heading is not a subproject."
+  (and (oh/is-project-p)
+       (not (oh/has-parent-project-p))))
 
 (defun oh/is-task-p ()
-  "Returns true if at point is a task." nil)
+  "Returns t for any heading that is a todo item but does not have a subtask."
+  (and (oh/is-todo-p)
+       (not (oh/has-subtask-p))))
+
+(defun oh/is-subtask-p ()
+  "Returns t for any heading that is a task with a parent project."
+  (and (oh/is-task-p)
+       (oh/has-parent-project-p)))
 
 (defun oh/is-single-task-p ()
-  "Returns true if at point is a task that´s not part of a project.")
+  "Returns t for any heading that is a task without a parent project."
+  (and (oh/is-task-p)
+       (not (oh/has-parent-project-p))))
 
 (defun oh/is-habit-p ()
-  "Returns true if at point is a recurring habit."
+  "Returns t for any heading that is a habit."
   (org-is-habit-p))
 
+(defun oh/is-inactive-p ()
+  "Returns t for any heading that is of todo state `SOMEDAY`, `HOLD` or
+  `WAITING`. This also applys to headings that have parent headings that are
+  of those given todo states."
+  (save-excursion
+    (let ((is-inactive (member (org-get-todo-state) '("SOMEDAY" "HOLD" "WAITING"))))
+      (while (and (not is-inactive) (org-up-heading-safe))
+        (when (member (org-get-todo-state) '("SOMEDAY" "HOLD" "WAITING"))
+          (setq is-inactive t)))
+      is-inactive)))
+
 (defun oh/is-scheduled-p ()
-  "True if the current entry is scheduled."
-  (let (beg end m)
-    (org-back-to-heading t)
-    (setq beg (point)
-          end (progn (outline-next-heading)
-                     (1- (point))))
-    (goto-char beg)
+  "Returns t for any scheduled heading."
+  (org-back-to-heading t)
+  (let ((end (save-excursion (outline-next-heading) (1- (point)))))
     (re-search-forward org-scheduled-time-regexp end t)))
 
 (defun oh/is-deadline-p ()
-  "True if the current entry is deadlined."
-  (let (beg end m)
-    (org-back-to-heading t)
-    (setq beg (point)
-          end (progn (outline-next-heading)
-                     (1- (point))))
-    (goto-char beg)
+  "Returns t for any heading with a deadline."
+  (org-back-to-heading t)
+  (let ((end (save-excursion (outline-next-heading) (1- (point)))))
     (re-search-forward org-deadline-time-regexp end t)))
 
 (defun oh/is-scheduled-today ()
