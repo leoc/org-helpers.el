@@ -56,7 +56,8 @@
                              ((:subtree-if-restricted-and subtree-restricted) nil)
                              ((:subtree-if-unrestricted-and subtree-unrestricted) nil))
   "True when one of the given check functions return true."
-  (let* ((subtree-values (or types subtree))
+  (save-restriction
+    (let* ((subtree-values (or types subtree))
         (subtree-end (save-excursion (org-end-of-subtree t)))
         (next-headline (save-excursion (or (outline-next-heading)
                                            (point-max))))
@@ -84,7 +85,7 @@
            (not restricted-to-project)
            (eval (macroexpand `(oh/agenda-type ,@subtree-unrestricted))))
       subtree-end)
-     (t nil))))
+     (t nil)))))
 
 (defun oh/has-subtask-p ()
   "Returns t for any heading that has subtasks."
@@ -205,9 +206,67 @@
 (defun oh/is-pending-deadline ()
   "" nil)
 
+
+;;; MOVEMENT HELPERS
+;; To move easily between headings.
+
 (defun oh/find-toplevel-project ()
   "Moves the point to the top project of the current headline, if any ..."
-  nil)
+  (save-restriction
+    (widen)
+    (let ((project-point (point)))
+      (while (org-up-heading-safe)
+        (if (oh/is-todo-p)
+            (setq project-point (point))))
+      (goto-char project-point)
+      project-point)))
+
+(defun oh/show-toplevel-project ()
+  "Switches to the toplevel project of a task."
+  (interactive)
+  (if (equal major-mode 'org-agenda-mode)
+      (org-agenda-switch-to))
+  (oh/find-toplevel-project))
+
+;;; AGENDA RESTRICTION
+;; To provide easy context switches and better overview.
+
+(defun oh/agenda-set-restriction ()
+  "Sets the restriction lock for a subtree."
+  (org-narrow-to-subtree)
+  (org-agenda-set-restriction-lock))
+
+(defun oh/agenda-remove-restriction ()
+  "Removes the restriction lock for a subtree."
+  (interactive)
+  (widen)
+  (org-agenda-remove-restriction-lock))
+
+(defun oh/agenda-restrict-to-subtree ()
+  "Restricts the agenda view to the subtree of the current heading."
+  (interactive)
+  (widen)
+  (if (equal major-mode 'org-agenda-mode)
+      (org-with-point-at (org-get-at-bol 'org-hd-marker)
+        (oh/agenda-set-restriction))
+    (oh/agenda-set-restriction)))
+
+(defun oh/agenda-restrict-to-project ()
+  "Restricts the agenda view to the top level project of the current heading."
+  (interactive)
+  (widen)
+  (save-excursion
+    (if (equal major-mode 'org-agenda-mode)
+        (org-with-point-at (org-get-at-bol 'org-hd-marker)
+          (oh/find-toplevel-project)
+          (oh/agenda-set-restriction))
+      (progn
+        (oh/find-toplevel-project)
+        (oh/agenda-set-restriction)))))
+
+
+
+
 
 (defun oh/agenda-sort (a b)
   "Sorting strategy for agenda items.
@@ -290,129 +349,8 @@ Late deadlines first, then scheduled, then non-late deadlines"
 (defun oh/is-scheduled-late (date-str)
   (string-match "Sched\.\\(.*\\)x:" date-str))
 
-(defun oh/set-agenda-restriction-lock (arg)
-  "Set restriction lock to current task subtree or file if prefix is specified"
-  (interactive "p")
-  (let* ((pom (org-get-at-bol 'org-hd-marker))
-         (tags (org-with-point-at pom (org-get-tags-at))))
-    (let ((restriction-type (if (equal arg 4) 'file 'subtree)))
-      (save-restriction
-        (cond
-         ((equal major-mode 'org-agenda-mode)
-          (org-with-point-at pom
-            (org-agenda-set-restriction-lock restriction-type)))
-         ((and (equal major-mode 'org-mode) (org-before-first-heading-p))
-          (org-agenda-set-restriction-lock 'file))
-         (t
-          (org-with-point-at pom
-            (org-agenda-set-restriction-lock restriction-type))))))))
-
-
-(defun oh/org-todo (arg)
-  (interactive "p")
-  (if (equal arg 4)
-      (save-restriction
-        (widen)
-        (org-narrow-to-subtree)
-        (org-show-todo-tree nil))
-    (widen)
-    (org-narrow-to-subtree)
-    (org-show-todo-tree nil)))
-
-(defun oh/widen ()
-  (interactive)
-  (widen)
-  (org-agenda-remove-restriction-lock))
-
-(defun oh/narrow-to-org-subtree ()
-  (widen)
-  (org-narrow-to-subtree)
-  (save-restriction
-    (org-agenda-set-restriction-lock)))
-
-(defun oh/narrow-to-subtree ()
-  (interactive)
-  (org-get-at-bol)
-  (if (equal major-mode 'org-agenda-mode)
-      (org-with-point-at (org-get-at-bol 'org-hd-marker)
-        (oh/narrow-to-org-subtree))
-    (oh/narrow-to-org-subtree)))
-
-(defun oh/narrow-up-one-org-level ()
-  (widen)
-  (save-excursion
-    (outline-up-heading 1 'invisible-ok)
-    (oh/narrow-to-org-subtree)))
-
-(defun oh/narrow-up-one-level ()
-  (interactive)
-  (if (equal major-mode 'org-agenda-mode)
-      (org-with-point-at (org-get-at-bol 'org-hd-marker)
-        (oh/narrow-up-one-org-level))
-    (oh/narrow-up-one-org-level)))
-
-(defun oh/narrow-to-org-project ()
-  (widen)
-  (save-excursion
-    (oh/find-project-task)
-    (oh/narrow-to-org-subtree)))
-
-(defun oh/narrow-to-project ()
-  (interactive)
-;  (if (equal major-mode 'org-agenda-mode)
-;      (org-with-point-at (org-get-at-bol 'org-hd-marker)
-;        (oh/narrow-to-org-project))
-    (oh/narrow-to-org-project));)
-
-(defun oh/hide-other ()
-  (interactive)
-  (save-excursion
-    (org-back-to-heading 'invisible-ok)
-    (org-shifttab)
-    (org-reveal)
-    (org-cycle)))
-
-(defun oh/set-truncate-lines ()
-  "Toggle value of truncate-lines and refresh window display."
-  (interactive)
-  (setq truncate-lines (not truncate-lines))
-  ;; now refresh window display (an idiom from simple.el):
-  (save-excursion
-    (set-window-start (selected-window)
-                      (window-start (selected-window)))))
-
-(defun oh/make-org-scratch ()
-  (interactive)
-  (find-file "/tmp/publish/scratch.org")
-  (gnus-make-directory "/tmp/publish"))
-
-(defun oh/switch-to-scratch ()
-  (interactive)
-  (switch-to-buffer "*scratch*"))
-
-(defun oh/clock-in-to-next (kw)
-  "Switch a task from TODO to NEXT when clocking in.
-Skips capture tasks, projects, and subprojects.
-Switch projects and subprojects from NEXT back to TODO"
-  (when (not (and (boundp 'org-capture-mode) org-capture-mode))
-    (cond
-     ((and (member (org-get-todo-state) (list "TODO"))
-           (oh/is-task-p))
-      "NEXT")
-     ((and (member (org-get-todo-state) (list "NEXT"))
-           (oh/is-project-p))
-      "TODO"))))
-
-(defun oh/find-project-task ()
-  "Move point to the parent (project) task if any"
-  (save-restriction
-    (widen)
-    (let ((parent-task (save-excursion (org-back-to-heading 'invisible-ok) (point))))
-      (while (org-up-heading-safe)
-        (when (member (nth 2 (org-heading-components)) org-todo-keywords-1)
-          (setq parent-task (point))))
-      (goto-char parent-task)
-      parent-task)))
+;;; TIME CLOCKING
+;; Helpers to easily clock in for tasks.
 
 (defun oh/punch-in (arg)
   "Start continuous clocking and set the default task to the
@@ -445,11 +383,6 @@ as the default task."
   (when (org-clock-is-active)
     (org-clock-out))
   (org-agenda-remove-restriction-lock))
-
-(defun oh/clock-in-default-task ()
-  (save-excursion
-    (org-with-point-at org-clock-default-task
-      (org-clock-in))))
 
 (defun oh/clock-in-parent-task ()
   "Move point to the parent (project) task if any and clock in"
@@ -502,47 +435,12 @@ A prefix arg forces clock in of the default task."
     (org-with-point-at clock-in-to-task
       (org-clock-in nil))))
 
-(defun oh/list-sublevels-for-projects-indented ()
-  "Set org-tags-match-list-sublevels so when restricted to a subtree we list all subtasks.
-  This is normally used by skipping functions where this variable is already local to the agenda."
-  (if (marker-buffer org-agenda-restrict-begin)
-      (setq org-tags-match-list-sublevels 'indented)
-    (setq org-tags-match-list-sublevels nil))
-  nil)
 
-(defun oh/list-sublevels-for-projects ()
-  "Set org-tags-match-list-sublevels so when restricted to a subtree we list all subtasks.
-  This is normally used by skipping functions where this variable is already local to the agenda."
-  (if (marker-buffer org-agenda-restrict-begin)
-      (setq org-tags-match-list-sublevels t)
-    (setq org-tags-match-list-sublevels nil))
-  nil)
-
-(defun oh/skip-project-tasks-maybe ()
-  "Show tasks related to the current restriction.
-When restricted to a project, skip project and sub project tasks, habits, NEXT tasks, and loose tasks.
-When not restricted, skip project and sub-project tasks, habits, and project related tasks."
-  (save-restriction
-    (widen)
-    (let* ((subtree-end (save-excursion (org-end-of-subtree t)))
-           (next-headline (save-excursion (or (outline-next-heading) (point-max))))
-           (limit-to-project (marker-buffer org-agenda-restrict-begin)))
-      (cond
-       ((oh/is-project-p) next-headline)
-       ((org-is-habit-p) subtree-end)
-       ((and (not limit-to-project)
-             (oh/is-project-subtree-p))
-        subtree-end)
-       ((and limit-to-project
-             (oh/is-project-subtree-p)
-             (member (org-get-todo-state) (list "NEXT")))
-        subtree-end)
-       (t
-        (org-agenda-skip-entry-if 'scheduled 'deadline))))))
-
+;;; MISC HELPERS
 
 (defun oh/summary-todo-checkbox (c-on c-off)
-  "Switch entry to DONE when all subentry-checkboxes are done, to TODO otherwise."
+  "Switch entry to DONE when all subentry-checkboxes are done,
+to TODO otherwise."
   (outline-previous-visible-heading 1)
   (let (org-log-done org-log-states)
     (org-todo (if (= c-off 0) "DONE" "TODO"))))
