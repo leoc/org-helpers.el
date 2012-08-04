@@ -66,6 +66,9 @@
      ((and headline
            (eval (macroexpand `(oh/agenda-type ,@headline))))
       next-headline)
+     ((and subtree
+           (eval (macroexpand `(oh/agenda-type ,@subtree))))
+      subtree-end)
      ((and headline-restricted
            restricted-to-project
            (eval (macroexpand `(oh/agenda-type ,@headline-restricted))))
@@ -74,9 +77,6 @@
            (not restricted-to-project)
            (eval (macroexpand `(oh/agenda-type ,@headline-unrestricted))))
       next-headline)
-     ((and subtree
-           (eval (macroexpand `(oh/agenda-type ,@subtree))))
-      subtree-end)
      ((and subtree-restricted
            restricted-to-project
            (eval (macroexpand `(oh/agenda-type ,@subtree-restricted))))
