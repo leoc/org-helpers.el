@@ -233,6 +233,7 @@
 
 (defun oh/agenda-set-restriction ()
   "Sets the restriction lock for a subtree."
+  (interactive)
   (org-narrow-to-subtree)
   (org-agenda-set-restriction-lock))
 
@@ -245,7 +246,6 @@
 (defun oh/agenda-restrict-to-subtree ()
   "Restricts the agenda view to the subtree of the current heading."
   (interactive)
-  (widen)
   (if (equal major-mode 'org-agenda-mode)
       (org-with-point-at (org-get-at-bol 'org-hd-marker)
         (oh/agenda-set-restriction))
