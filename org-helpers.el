@@ -188,25 +188,6 @@
   (let ((end (save-excursion (outline-next-heading) (1- (point)))))
     (re-search-forward org-deadline-time-regexp end t)))
 
-(defun oh/is-scheduled-today ()
-  "" nil)
-
-(defun oh/is-scheduled-late ()
-  "" nil)
-
-(defun oh/is-deadline ()
-  "" nil)
-
-(defun oh/is-due-deadline ()
-  "" nil)
-
-(defun oh/is-late-deadline ()
-  "" nil)
-
-(defun oh/is-pending-deadline ()
-  "" nil)
-
-
 ;;; MOVEMENT HELPERS
 ;; To move easily between headings.
 
@@ -263,9 +244,6 @@
       (progn
         (oh/find-toplevel-project)
         (oh/agenda-set-restriction)))))
-
-
-
 
 
 (defun oh/agenda-sort (a b)
