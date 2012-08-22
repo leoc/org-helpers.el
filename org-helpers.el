@@ -166,13 +166,13 @@
   (org-is-habit-p))
 
 (defun oh/is-inactive-p ()
-  "Returns t for any heading that is of todo state `SOMEDAY`, `HOLD` or
-  `WAITING`. This also applys to headings that have parent headings that are
-  of those given todo states."
+  "Returns t for any heading that is of todo state `SOMEDAY`, `HOLD`,
+`WAITING`, `DONE` or `CANCELLED`. This also applys to headings that
+have parent headings that are of those given todo states."
   (save-excursion
-    (let ((is-inactive (member (org-get-todo-state) '("SOMEDAY" "HOLD" "WAITING"))))
+    (let ((is-inactive (member (org-get-todo-state) '("SOMEDAY" "HOLD" "WAITING" "CANCELLED" "DONE"))))
       (while (and (not is-inactive) (org-up-heading-safe))
-        (when (member (org-get-todo-state) '("SOMEDAY" "HOLD" "WAITING"))
+        (when (member (org-get-todo-state) '("SOMEDAY" "HOLD" "WAITING" "CANCELLED" "DONE"))
           (setq is-inactive t)))
       is-inactive)))
 
