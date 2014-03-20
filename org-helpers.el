@@ -178,6 +178,21 @@ have parent headings that are of those given todo states."
           (setq is-inactive t)))
       is-inactive)))
 
+(defun oh/is-inactive-project-p ()
+  "Returns t for any heading that is of todo state `SOMEDAY`, `HOLD`,
+`WAITING`, `DONE` or `CANCELLED` or if there is no TODO entry.
+This also applys to headings that have parent headings that are of those
+given todo states."
+  (save-excursion
+    (let* ((is-inactive (member (org-get-todo-state) '("SOMEDAY" "HOLD" "WAITING" "CANCELLED" "DONE")))
+           (end (save-excursion (org-end-of-subtree t)))
+           (is-inactive (or is-inactive
+                            (save-excursion (not (re-search-forward "^\\*+ \\(TODO\\|NEXT\\) " end t))))))
+      (while (and (not is-inactive) (org-up-heading-safe))
+        (when (member (org-get-todo-state) '("SOMEDAY" "HOLD" "WAITING" "CANCELLED" "DONE"))
+          (setq is-inactive t)))
+      is-inactive)))
+
 (defun oh/is-scheduled-p ()
   "Returns t for any scheduled heading."
   (org-back-to-heading t)
