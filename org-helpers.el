@@ -115,18 +115,19 @@
        (oh/has-subtask-p)))
 
 (defun oh/is-non-project-p ()
-  "Returns t for any heading that is not a project. E.g. that does not
+  "Returns t for any heading that is not a project.  E.g. that does not
    have a subtask or is not a todo item."
   (not (oh/is-project-p)))
 
 (defun oh/is-stuck-project-p ()
   "Returns t for any heading that is a project but does not have a NEXT
-   subtask."
+   subtask but has TODO subtasks."
   (save-excursion
     (let ((end (save-excursion (org-end-of-subtree t))))
       (outline-end-of-heading)
       (and (oh/is-project-p)
-           (not (re-search-forward "^\\*+ \\(NEXT\\|STARTED\\) " end t))))))
+           (not (save-excursion (re-search-forward "^\\*+ \\(NEXT\\|STARTED\\) " end t)))
+           (re-search-forward "^\\*+ TODO " end t)))))
 
 (defun oh/is-non-stuck-project-p ()
   "Returns t for any heading that is a project and has a `NEXT` subtask."
@@ -134,7 +135,8 @@
     (let ((end (save-excursion (org-end-of-subtree t))))
       (outline-end-of-heading)
       (and (oh/is-project-p)
-           (re-search-forward "^\\*+ \\(NEXT\\|STARTED\\) " end t)))))
+           (or (save-excursion (re-search-forward "^\\*+ \\(NEXT\\|STARTED\\) " end t))
+               (not (re-search-forward "^\\*+ TODO " end t)))))))
 
 (defun oh/is-subproject-p ()
   "Returns t for any heading that is a project and has a parent project."
